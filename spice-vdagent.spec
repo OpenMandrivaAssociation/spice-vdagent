@@ -1,8 +1,8 @@
-%bcond_with systemd_login
+%bcond_without systemd_login
 
 Name:		spice-vdagent
 Version:	0.10.1
-Release:	1
+Release:	2
 Summary:	Agent for Spice guests
 Group:		System/Kernel and hardware
 License:	GPLv3+
