@@ -4,7 +4,7 @@ Name:		spice-vdagent
 Version:	0.10.1
 Release:	1
 Summary:	Agent for Spice guests
-Group:		Applications/System
+Group:		System/Kernel and hardware
 License:	GPLv3+
 URL:		http://spice-space.org/
 Source0:	http://spice-space.org/download/releases/%{name}-%{version}.tar.bz2
