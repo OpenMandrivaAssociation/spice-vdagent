@@ -1,8 +1,6 @@
-%bcond_without systemd_login
-
 Name:		spice-vdagent
-Version:	0.10.1
-Release:	2
+Version:	0.12.0
+Release:	1
 Summary:	Agent for Spice guests
 Group:		System/Kernel and hardware
 License:	GPLv3+
@@ -10,14 +8,14 @@ URL:		http://spice-space.org/
 Source0:	http://spice-space.org/download/releases/%{name}-%{version}.tar.bz2
 BuildRequires:	spice-protocol
 BuildRequires:	pkgconfig(systemd)
-%if %{with systemd_login}
-BuildRequires:	pkgconfig(libsystemd-login) >= 42
-%endif
+BuildRequires:	pkgconfig(libsystemd-login) >= 188
 BuildRequires:	pkgconfig(dbus-1)
 BuildRequires:	pkgconfig(pciaccess)
 BuildRequires:	pkgconfig(xrandr)
 BuildRequires:	pkgconfig(xinerama)
 BuildRequires:	pkgconfig(xfixes)
+Requires(pre):	rpm-helper
+Requires(preun): rpm-helper
 
 %description
 Spice agent for Linux guests offering the following features:
@@ -36,9 +34,8 @@ Features:
 
 %build
 %configure2_5x \
-%if %{with systemd_login}
-	--with-session-info=systemd
-%endif
+	--with-session-info=systemd \
+	--with-init-script=systemd
 
 %make
 
@@ -46,29 +43,26 @@ Features:
 %makeinstall_std
 
 %post
-/sbin/chkconfig --add spice-vdagentd
+%_post_service spice-vdagentd.service
 
 %preun
-if [ $1 = 0 ] ; then
-    /sbin/service spice-vdagentd stop >/dev/null 2>&1
-    /sbin/chkconfig --del spice-vdagentd
-fi
+%_preun_service spice-vdagentd.service
 
 %postun
-if [ "$1" -ge "1" ] ; then
-    /sbin/service spice-vdagentd condrestart >/dev/null 2>&1 || :
-fi
+%systemd_postun_with_restart spice-vdagentd.service
 
 %files
 %doc COPYING ChangeLog README TODO
-%{_sysconfdir}/tmpfiles.d/spice-vdagentd.conf
-%{_initddir}/spice-vdagentd
+%config(noreplace) %{_sysconfdir}/rsyslog.d/spice-vdagentd.conf
+/lib/udev/rules.d/70-spice-vdagentd.rules
+%{_unitdir}/spice-vdagentd.service
+%{_unitdir}/spice-vdagentd.target
+%{_prefix}/lib/tmpfiles.d/spice-vdagentd.conf
 %{_bindir}/spice-vdagent
 %{_sbindir}/spice-vdagentd
-%{_var}/log/spice-vdagentd
 %{_var}/run/spice-vdagentd
+%{_sysconfdir}/modules-load.d/spice-vdagentd.conf
 %{_sysconfdir}/xdg/autostart/spice-vdagent.desktop
 # For /usr/share/gdm/autostart/LoginWindow/spice-vdagent.desktop
 # We own the dir too, otherwise we must Require gdm
 %{_datadir}/gdm
-
