@@ -1,6 +1,6 @@
 Name:		spice-vdagent
 Version:	0.12.0
-Release:	1
+Release:	2
 Summary:	Agent for Spice guests
 Group:		System/Kernel and hardware
 License:	GPLv3+
