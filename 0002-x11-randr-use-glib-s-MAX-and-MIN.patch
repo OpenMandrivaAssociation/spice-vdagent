@@ -1,0 +1,54 @@
+From 70c5908f8c46a0cd53cca109ecc0c56ff5b33d77 Mon Sep 17 00:00:00 2001
+From: Victor Toso <me@victortoso.com>
+Date: Fri, 12 Jul 2019 11:12:39 +0200
+Subject: [PATCH 02/23] x11-randr: use glib's MAX and MIN
+
+Since 2861868 "randr: remove monitors.xml on auto-configuration" in
+2015-04-10 by Marc-Andre Lureau <marcandre.lureau@redhat.com> this
+file includes glib.h and can remove those helpers.
+
+Signed-off-by: Victor Toso <victortoso@redhat.com>
+Acked-by: Frediano Ziglio <fziglio@redhat.com>
+---
+ src/vdagent/x11-randr.c | 18 ++++--------------
+ 1 file changed, 4 insertions(+), 14 deletions(-)
+
+diff --git a/src/vdagent/x11-randr.c b/src/vdagent/x11-randr.c
+index 88857c8..d000e28 100644
+--- a/src/vdagent/x11-randr.c
++++ b/src/vdagent/x11-randr.c
+@@ -555,16 +555,6 @@ int vdagent_x11_randr_handle_event(struct vdagent_x11 *x11,
+     return handled;
+ }
+ 
+-static int min_int(int x, int y)
+-{
+-    return x > y ? y : x;
+-}
+-
+-static int max_int(int x, int y)
+-{
+-    return x > y ? x : y;
+-}
+-
+ static int constrain_to_range(int low, int *val, int high)
+ {
+     if (low <= *val && *val <= high) {
+@@ -631,10 +621,10 @@ static void zero_base_monitors(struct vdagent_x11 *x11,
+         mon_width = (int *)&mon_config->monitors[i].width;
+         mon_height = (int *)&mon_config->monitors[i].height;
+         constrain_to_screen(x11, mon_width, mon_height);
+-        min_x = min_int(mon_config->monitors[i].x, min_x);
+-        min_y = min_int(mon_config->monitors[i].y, min_y);
+-        max_x = max_int(mon_config->monitors[i].x + *mon_width, max_x);
+-        max_y = max_int(mon_config->monitors[i].y + *mon_height, max_y);
++        min_x = MIN(mon_config->monitors[i].x, min_x);
++        min_y = MIN(mon_config->monitors[i].y, min_y);
++        max_x = MAX(mon_config->monitors[i].x + *mon_width, max_x);
++        max_y = MAX(mon_config->monitors[i].y + *mon_height, max_y);
+     }
+     if (min_x != 0 || min_y != 0) {
+         syslog(LOG_ERR, "%s: agent config %d,%d rooted, adjusting to 0,0.",
+-- 
+2.23.0
+

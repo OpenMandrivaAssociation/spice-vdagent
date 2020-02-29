@@ -1,0 +1,264 @@
+From 66935d134e1f359eda5cfac053b0bf716811670a Mon Sep 17 00:00:00 2001
+From: Victor Toso <me@victortoso.com>
+Date: Fri, 12 Jul 2019 11:12:36 +0200
+Subject: [PATCH 08/23] device-info: remove g_list_length() on
+ compare_addresses()
+
+The g_list_length() function does iterate over both lists to compare
+its length. Considering that we use this to check for true/false and
+we will iterate again on both lists, we can do so once.
+
+This also avoids covscan/clang warnings:
+
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:216:27: warning: Access to field 'data' results in a dereference of a null pointer (loaded from variable 'lb')
+ | #        PciDevice *devb = lb->data;
+ | #                          ^
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:397:5: note: Taking false branch
+ | #    if (!user_pci_addr) {
+ | #    ^
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:407:22: note: Calling 'find_device_at_pci_address'
+ | #    char *dev_path = find_device_at_pci_address(user_pci_addr, &vendor_id, &device_id);
+ | #                     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:329:5: note: Taking true branch
+ | #    g_return_val_if_fail(pci_addr != NULL, NULL);
+ | #    ^
+ | /usr/include/glib-2.0/glib/gmessages.h:594:9: note: expanded from macro 'g_return_val_if_fail'
+ | #     if G_LIKELY(expr) { } else                                         \
+ | #        ^
+ | /usr/include/glib-2.0/glib/gmacros.h:385:43: note: expanded from macro 'G_LIKELY'
+ | ##define G_LIKELY(expr) (__builtin_expect (_G_BOOLEAN_EXPR((expr)), 1))
+ | #                                          ^
+ | /usr/include/glib-2.0/glib/gmacros.h:379:4: note: expanded from macro '_G_BOOLEAN_EXPR'
+ | #   if (expr)                                    \
+ | #   ^
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:329:5: note: Taking true branch
+ | /usr/include/glib-2.0/glib/gmessages.h:594:6: note: expanded from macro 'g_return_val_if_fail'
+ | #     if G_LIKELY(expr) { } else                                         \
+ | #     ^
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:329:5: note: Loop condition is false.  Exiting loop
+ | /usr/include/glib-2.0/glib/gmessages.h:593:40: note: expanded from macro 'g_return_val_if_fail'
+ | ##define g_return_val_if_fail(expr,val)  G_STMT_START{                   \
+ | #                                        ^
+ | /usr/include/glib-2.0/glib/gmacros.h:346:23: note: expanded from macro 'G_STMT_START'
+ | ##define G_STMT_START  do
+ | #                      ^
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:330:5: note: Taking true branch
+ | #    g_return_val_if_fail(device_id != NULL, NULL);
+ | #    ^
+ | /usr/include/glib-2.0/glib/gmessages.h:594:9: note: expanded from macro 'g_return_val_if_fail'
+ | #     if G_LIKELY(expr) { } else                                         \
+ | #        ^
+ | /usr/include/glib-2.0/glib/gmacros.h:385:43: note: expanded from macro 'G_LIKELY'
+ | ##define G_LIKELY(expr) (__builtin_expect (_G_BOOLEAN_EXPR((expr)), 1))
+ | #                                          ^
+ | /usr/include/glib-2.0/glib/gmacros.h:379:4: note: expanded from macro '_G_BOOLEAN_EXPR'
+ | #   if (expr)                                    \
+ | #   ^
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:330:5: note: Taking true branch
+ | /usr/include/glib-2.0/glib/gmessages.h:594:6: note: expanded from macro 'g_return_val_if_fail'
+ | #     if G_LIKELY(expr) { } else                                         \
+ | #     ^
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:330:5: note: Loop condition is false.  Exiting loop
+ | /usr/include/glib-2.0/glib/gmessages.h:593:40: note: expanded from macro 'g_return_val_if_fail'
+ | ##define g_return_val_if_fail(expr,val)  G_STMT_START{                   \
+ | #                                        ^
+ | /usr/include/glib-2.0/glib/gmacros.h:346:23: note: expanded from macro 'G_STMT_START'
+ | ##define G_STMT_START  do
+ | #                      ^
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:331:5: note: Taking true branch
+ | #    g_return_val_if_fail(vendor_id != NULL, NULL);
+ | #    ^
+ | /usr/include/glib-2.0/glib/gmessages.h:594:9: note: expanded from macro 'g_return_val_if_fail'
+ | #     if G_LIKELY(expr) { } else                                         \
+ | #        ^
+ | /usr/include/glib-2.0/glib/gmacros.h:385:43: note: expanded from macro 'G_LIKELY'
+ | ##define G_LIKELY(expr) (__builtin_expect (_G_BOOLEAN_EXPR((expr)), 1))
+ | #                                          ^
+ | /usr/include/glib-2.0/glib/gmacros.h:379:4: note: expanded from macro '_G_BOOLEAN_EXPR'
+ | #   if (expr)                                    \
+ | #   ^
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:331:5: note: Taking true branch
+ | /usr/include/glib-2.0/glib/gmessages.h:594:6: note: expanded from macro 'g_return_val_if_fail'
+ | #     if G_LIKELY(expr) { } else                                         \
+ | #     ^
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:331:5: note: Loop condition is false.  Exiting loop
+ | /usr/include/glib-2.0/glib/gmessages.h:593:40: note: expanded from macro 'g_return_val_if_fail'
+ | ##define g_return_val_if_fail(expr,val)  G_STMT_START{                   \
+ | #                                        ^
+ | /usr/include/glib-2.0/glib/gmacros.h:346:23: note: expanded from macro 'G_STMT_START'
+ | ##define G_STMT_START  do
+ | #                      ^
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:334:5: note: Loop condition is true.  Entering loop body
+ | #    for (int i = 0; i < 10; ++i) {
+ | #    ^
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:340:13: note: Assuming the condition is false
+ | #        if (stat(dev_path, &buf) != 0) {
+ | #            ^~~~~~~~~~~~~~~~~~~~~~~~~
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:340:9: note: Taking false branch
+ | #        if (stat(dev_path, &buf) != 0) {
+ | #        ^
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:355:13: note: Assuming the condition is false
+ | #        if (realpath(sys_path, device_link) == NULL) {
+ | #            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:355:9: note: Taking false branch
+ | #        if (realpath(sys_path, device_link) == NULL) {
+ | #        ^
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:361:36: note: Calling 'parse_pci_address_from_sysfs_path'
+ | #        PciAddress *drm_pci_addr = parse_pci_address_from_sysfs_path(device_link);
+ | #                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:129:9: note: Assuming 'pos' is non-null
+ | #    if (!pos) {
+ | #        ^~~~
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:129:5: note: Taking false branch
+ | #    if (!pos) {
+ | #    ^
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:136:9: note: Assuming 'pos' is non-null
+ | #    if (!pos) {
+ | #        ^~~~
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:136:5: note: Taking false branch
+ | #    if (!pos) {
+ | #    ^
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:142:9: note: Assuming 'pos' is non-null
+ | #    if (!pos) {
+ | #        ^~~~
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:142:5: note: Taking false branch
+ | #    if (!pos) {
+ | #    ^
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:146:27: note: Calling 'pci_address_new'
+ | #    PciAddress *address = pci_address_new();
+ | #                          ^~~~~~~~~~~~~~~~~
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:61:12: note: Taking false branch
+ | #    return g_new0(PciAddress, 1);
+ | #           ^
+ | /usr/include/glib-2.0/glib/gmem.h:279:42: note: expanded from macro 'g_new0'
+ | ##define g_new0(struct_type, n_structs)                  _G_NEW (struct_type, n_structs, malloc0)
+ | #                                                        ^
+ | /usr/include/glib-2.0/glib/gmem.h:211:4: note: expanded from macro '_G_NEW'
+ | #          if (__s == 1)                                         \
+ | #          ^
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:61:12: note: Left side of '&&' is false
+ | /usr/include/glib-2.0/glib/gmem.h:279:42: note: expanded from macro 'g_new0'
+ | ##define g_new0(struct_type, n_structs)                  _G_NEW (struct_type, n_structs, malloc0)
+ | #                                                        ^
+ | /usr/include/glib-2.0/glib/gmem.h:213:40: note: expanded from macro '_G_NEW'
+ | #          else if (__builtin_constant_p (__n) &&                \
+ | #                                              ^
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:61:12: note: Null pointer value stored to field 'devices'
+ | #    return g_new0(PciAddress, 1);
+ | #           ^~~~~~~~~~~~~~~~~~~~~
+ | /usr/include/glib-2.0/glib/gmem.h:279:42: note: expanded from macro 'g_new0'
+ | ##define g_new0(struct_type, n_structs)                  _G_NEW (struct_type, n_structs, malloc0)
+ | #                                                        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ | /usr/include/glib-2.0/glib/gmem.h:217:12: note: expanded from macro '_G_NEW'
+ | #            __p = g_##func##_n (__n, __s);                      \
+ | #                  ^~~~~~~~~~~~~~~~~~~~~~~
+ | <scratch space>:76:1: note: expanded from here
+ | #g_malloc0_n
+ | #^
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:146:27: note: Returning from 'pci_address_new'
+ | #    PciAddress *address = pci_address_new();
+ | #                          ^~~~~~~~~~~~~~~~~
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:149:5: note: Loop condition is true.  Entering loop body
+ | #    while (pos) {
+ | #    ^
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:150:26: note: Taking false branch
+ | #        PciDevice *dev = g_new0(PciDevice, 1);
+ | #                         ^
+ | /usr/include/glib-2.0/glib/gmem.h:279:42: note: expanded from macro 'g_new0'
+ | ##define g_new0(struct_type, n_structs)                  _G_NEW (struct_type, n_structs, malloc0)
+ | #                                                        ^
+ | /usr/include/glib-2.0/glib/gmem.h:211:4: note: expanded from macro '_G_NEW'
+ | #          if (__s == 1)                                         \
+ | #          ^
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:150:26: note: Left side of '&&' is false
+ | /usr/include/glib-2.0/glib/gmem.h:279:42: note: expanded from macro 'g_new0'
+ | ##define g_new0(struct_type, n_structs)                  _G_NEW (struct_type, n_structs, malloc0)
+ | #                                                        ^
+ | /usr/include/glib-2.0/glib/gmem.h:213:40: note: expanded from macro '_G_NEW'
+ | #          else if (__builtin_constant_p (__n) &&                \
+ | #                                              ^
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:152:9: note: Taking true branch
+ | #        if (!parse_pci_device(pos + 1, next, dev)) {
+ | #        ^
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:154:13: note:  Execution continues on line 159
+ | #            break;
+ | #            ^
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:361:36: note: Returning from 'parse_pci_address_from_sysfs_path'
+ | #        PciAddress *drm_pci_addr = parse_pci_address_from_sysfs_path(device_link);
+ | #                                   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:362:9: note: Taking false branch
+ | #        if (!drm_pci_addr) {
+ | #        ^
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:367:14: note: Calling 'compare_addresses'
+ | #        if (!compare_addresses(pci_addr, drm_pci_addr)) {
+ | #             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:207:11: note: Assuming the condition is true
+ | #    if (!(a->domain == b->domain
+ | #          ^~~~~~~~~~~~~~~~~~~~~~
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:207:11: note: Left side of '&&' is true
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:208:12: note: Assuming the condition is true
+ | #        && g_list_length(a->devices) == g_list_length(b->devices))) {
+ | #           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:207:5: note: Taking false branch
+ | #    if (!(a->domain == b->domain
+ | #    ^
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:212:35: note: 'lb' initialized to a null pointer value
+ | #    for (GList *la = a->devices, *lb = b->devices;
+ | #                                  ^~
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:213:10: note: Assuming 'la' is not equal to NULL
+ | #         la != NULL;
+ | #         ^~~~~~~~~~
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:212:5: note: Loop condition is true.  Entering loop body
+ | #    for (GList *la = a->devices, *lb = b->devices;
+ | #    ^
+ | spice-vdagent-0.19.0/src/vdagent/device-info.c:216:27: note: Access to field 'data' results in a dereference of a null pointer (loaded from variable 'lb')
+ | #        PciDevice *devb = lb->data;
+ | #                          ^~
+ | #  214|            la = la->next, lb = lb->next) {
+ | #  215|           PciDevice *deva = la->data;
+ | #  216|->         PciDevice *devb = lb->data;
+ | #  217|
+ | #  218|           if (deva->slot != devb->slot
+
+Signed-off-by: Victor Toso <victortoso@redhat.com>
+Acked-by: Frediano Ziglio <fziglio@redhat.com>
+---
+ src/vdagent/device-info.c | 12 +++++++-----
+ 1 file changed, 7 insertions(+), 5 deletions(-)
+
+diff --git a/src/vdagent/device-info.c b/src/vdagent/device-info.c
+index 4983543..6b0e28f 100644
+--- a/src/vdagent/device-info.c
++++ b/src/vdagent/device-info.c
+@@ -204,13 +204,13 @@ static PciAddress* parse_pci_address_from_spice(char *input)
+ static bool compare_addresses(PciAddress *a, PciAddress *b)
+ {
+     // only check domain, slot, and function
+-    if (!(a->domain == b->domain
+-        && g_list_length(a->devices) == g_list_length(b->devices))) {
++    if (a->domain != b->domain) {
+         return false;
+     }
+ 
+-    for (GList *la = a->devices, *lb = b->devices;
+-         la != NULL;
++    const GList *la, *lb;
++    for (la = a->devices, lb = b->devices;
++         la != NULL && lb != NULL;
+          la = la->next, lb = lb->next) {
+         PciDevice *deva = la->data;
+         PciDevice *devb = lb->data;
+@@ -220,7 +220,9 @@ static bool compare_addresses(PciAddress *a, PciAddress *b)
+             return false;
+         }
+     }
+-    return true;
++
++    /* True only if both have the same length */
++    return (la == NULL && lb == NULL);
+ }
+ 
+ // Connector type names from xorg modesetting driver
+-- 
+2.23.0
+

@@ -1,0 +1,48 @@
+From 6cb59383f5179b84c7e24654728084135df63a04 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Marc-Andr=C3=A9=20Lureau?= <marcandre.lureau@redhat.com>
+Date: Fri, 22 Mar 2019 16:12:44 +0100
+Subject: [PATCH 21/23] clipboard: filter out only our own events
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Do not rely on internal state when receiving clipboard events, as this
+may race with external events. Use gtk_clipboard_set_with_owner()
+
+Signed-off-by: Marc-André Lureau <marcandre.lureau@redhat.com>
+---
+ src/vdagent/clipboard.c | 10 ++++++----
+ 1 file changed, 6 insertions(+), 4 deletions(-)
+
+diff --git a/src/vdagent/clipboard.c b/src/vdagent/clipboard.c
+index cf6e344..9fb87e3 100644
+--- a/src/vdagent/clipboard.c
++++ b/src/vdagent/clipboard.c
+@@ -238,8 +238,9 @@ static void clipboard_owner_change_cb(GtkClipboard        *clipboard,
+     Selection *sel = &c->selections[sel_id];
+ 
+     /* if the event was caused by gtk_clipboard_set_with_data(), ignore it  */
+-    if (sel->owner == OWNER_CLIENT)
++    if (gtk_clipboard_get_owner(clipboard) == G_OBJECT(c)) {
+         return;
++    }
+ 
+     if (sel->owner == OWNER_GUEST) {
+         clipboard_new_owner(c, sel_id, OWNER_NONE);
+@@ -357,9 +358,10 @@ void vdagent_clipboard_grab(VDAgentClipboards *c, guint sel_id,
+         g_clear_pointer(&sel->last_targets_req, request_ref_cancel);
+     }
+ 
+-    if (gtk_clipboard_set_with_data(sel->clipboard,
+-                                    targets, n_targets,
+-                                    clipboard_get_cb, clipboard_clear_cb, c))
++    if (gtk_clipboard_set_with_owner(sel->clipboard,
++                                     targets, n_targets,
++                                     clipboard_get_cb, clipboard_clear_cb,
++                                     G_OBJECT(c)))
+         clipboard_new_owner(c, sel_id, OWNER_CLIENT);
+     else {
+         syslog(LOG_ERR, "%s: sel_id=%u: clipboard grab failed", __func__, sel_id);
+-- 
+2.23.0
+

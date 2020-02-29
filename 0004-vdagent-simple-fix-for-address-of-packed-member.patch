@@ -1,0 +1,53 @@
+From 6bfbd03e83fc8fcf783d4431607d7d6129af58b0 Mon Sep 17 00:00:00 2001
+From: Victor Toso <me@victortoso.com>
+Date: Fri, 12 Jul 2019 11:12:42 +0200
+Subject: [PATCH 04/23] vdagent: simple fix for address-of-packed-member
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Seems to be a false positive but as this message only happens when user
+client connects, we can copy this array to make compiling warn free.
+
+ > src/vdagent/vdagent.c: In function ‘daemon_read_complete’:
+ > src/vdagent/vdagent.c:226:71: error: taking address of packed member of
+ >     ‘struct VDAgentAudioVolumeSync’ may result in an unaligned pointer
+ >     value [-Werror=address-of-packed-member]
+ >   226 |             vdagent_audio_playback_sync(avs->mute, avs->nchannels, avs->volume);
+ >       |                                                                    ~~~^~~~~~~~
+ > src/vdagent/vdagent.c:228:69: error: taking address of packed member of
+ >     ‘struct VDAgentAudioVolumeSync’ may result in an unaligned pointer
+ >     value [-Werror=address-of-packed-member]
+ >   228 |             vdagent_audio_record_sync(avs->mute, avs->nchannels, avs->volume);
+ >       |                                                                  ~~~^~~~~~~~
+
+Signed-off-by: Victor Toso <victortoso@redhat.com>
+Acked-by: Frediano Ziglio <fziglio@redhat.com>
+---
+ src/vdagent/vdagent.c | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/src/vdagent/vdagent.c b/src/vdagent/vdagent.c
+index d799d1f..0e2e73e 100644
+--- a/src/vdagent/vdagent.c
++++ b/src/vdagent/vdagent.c
+@@ -222,11 +222,14 @@ static void daemon_read_complete(struct udscs_connection **connp,
+         break;
+     case VDAGENTD_AUDIO_VOLUME_SYNC: {
+         VDAgentAudioVolumeSync *avs = (VDAgentAudioVolumeSync *)data;
++        uint16_t *volume = g_memdup(avs->volume, sizeof(uint16_t) * avs->nchannels);
++
+         if (avs->is_playback) {
+-            vdagent_audio_playback_sync(avs->mute, avs->nchannels, avs->volume);
++            vdagent_audio_playback_sync(avs->mute, avs->nchannels, volume);
+         } else {
+-            vdagent_audio_record_sync(avs->mute, avs->nchannels, avs->volume);
++            vdagent_audio_record_sync(avs->mute, avs->nchannels, volume);
+         }
++        g_free(volume);
+         break;
+     }
+     case VDAGENTD_FILE_XFER_DATA:
+-- 
+2.23.0
+
