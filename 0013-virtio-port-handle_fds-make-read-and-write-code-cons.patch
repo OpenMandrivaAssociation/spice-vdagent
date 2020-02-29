@@ -1,0 +1,41 @@
+From f807e98bb6474949e74e1890fd483d7ef4011a6c Mon Sep 17 00:00:00 2001
+From: Uri Lublin <uril@redhat.com>
+Date: Thu, 29 Aug 2019 19:35:24 +0300
+Subject: [PATCH 13/23] virtio-port: handle_fds: make read and write code
+ consistent
+
+A comment and curly brackets for style were added.
+
+Signed-off-by: Uri Lublin <uril@redhat.com>
+Acked-by: Frediano Ziglio <fziglio@redhat.com>
+---
+ src/vdagentd/virtio-port.c | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/src/vdagentd/virtio-port.c b/src/vdagentd/virtio-port.c
+index 3ae7f22..06f3a32 100644
+--- a/src/vdagentd/virtio-port.c
++++ b/src/vdagentd/virtio-port.c
+@@ -166,14 +166,14 @@ int vdagent_virtio_port_fill_fds(struct vdagent_virtio_port *vport,
+ void vdagent_virtio_port_handle_fds(struct vdagent_virtio_port **vportp,
+         fd_set *readfds, fd_set *writefds)
+ {
+-    if (!*vportp)
+-        return;
+-
+-    if (FD_ISSET((*vportp)->fd, readfds))
++    if (*vportp && FD_ISSET((*vportp)->fd, readfds)) {
+         vdagent_virtio_port_do_read(vportp);
++    }
+ 
+-    if (*vportp && FD_ISSET((*vportp)->fd, writefds))
++    /* *vportp may have been destroyed in do_read */
++    if (*vportp && FD_ISSET((*vportp)->fd, writefds)) {
+         vdagent_virtio_port_do_write(vportp);
++    }
+ }
+ 
+ static struct vdagent_virtio_port_buf* vdagent_virtio_port_get_last_wbuf(
+-- 
+2.23.0
+

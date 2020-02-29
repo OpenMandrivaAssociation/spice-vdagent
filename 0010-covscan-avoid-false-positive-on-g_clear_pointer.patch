@@ -1,0 +1,142 @@
+From 83d2dbba246497408f2782854e1f021d334dfbc2 Mon Sep 17 00:00:00 2001
+From: Victor Toso <me@victortoso.com>
+Date: Tue, 27 Aug 2019 10:59:30 +0200
+Subject: [PATCH 10/23] covscan: avoid false positive on g_clear_pointer()
+
+This is a CLANG_WARNING found by covscan. It is a false positive as
+g_clear_pointer() does set vportp to NULL, meaning that the situation
+described by covscan below should not be reached. Moving away from
+g_clear_pointer() in this specific case just to make our tool happy.
+
+Covscan report:
+ > spice-vdagent-0.19.0/src/vdagentd/virtio-port.c:458:9: warning: Use of memory after it is freed
+ > #    if (wbuf->write_pos != wbuf->size) {
+ > #        ^
+ > spice-vdagent-0.19.0/src/vdagentd/virtio-port.c:268:12: note: Assuming the condition is true
+ > #    while (*vportp && (*vportp)->write_buf)
+ > #           ^~~~~~~
+ > spice-vdagent-0.19.0/src/vdagentd/virtio-port.c:268:12: note: Left side of '&&' is true
+ > spice-vdagent-0.19.0/src/vdagentd/virtio-port.c:268:5: note: Loop condition is true.  Entering loop body
+ > #    while (*vportp && (*vportp)->write_buf)
+ > #    ^
+ > spice-vdagent-0.19.0/src/vdagentd/virtio-port.c:269:9: note: Calling 'vdagent_virtio_port_do_write'
+ > #        vdagent_virtio_port_do_write(vportp);
+ > #        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ > spice-vdagent-0.19.0/src/vdagentd/virtio-port.c:453:5: note: Taking false branch
+ > #    if (!wbuf) {
+ > #    ^
+ > spice-vdagent-0.19.0/src/vdagentd/virtio-port.c:458:9: note: Assuming the condition is false
+ > #    if (wbuf->write_pos != wbuf->size) {
+ > #        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ > spice-vdagent-0.19.0/src/vdagentd/virtio-port.c:458:5: note: Taking false branch
+ > #    if (wbuf->write_pos != wbuf->size) {
+ > #    ^
+ > spice-vdagent-0.19.0/src/vdagentd/virtio-port.c:465:9: note: Assuming 'n' is < 0
+ > #    if (n < 0) {
+ > #        ^~~~~
+ > spice-vdagent-0.19.0/src/vdagentd/virtio-port.c:465:5: note: Taking true branch
+ > #    if (n < 0) {
+ > #    ^
+ > spice-vdagent-0.19.0/src/vdagentd/virtio-port.c:466:13: note: Assuming the condition is false
+ > #        if (errno == EINTR)
+ > #            ^~~~~~~~~~~~~~
+ > /usr/include/errno.h:38:16: note: expanded from macro 'errno'
+ > ## define errno (*__errno_location ())
+ > #               ^
+ > spice-vdagent-0.19.0/src/vdagentd/virtio-port.c:466:9: note: Taking false branch
+ > #        if (errno == EINTR)
+ > #        ^
+ > spice-vdagent-0.19.0/src/vdagentd/virtio-port.c:469:9: note: Calling 'vdagent_virtio_port_destroy'
+ > #        vdagent_virtio_port_destroy(vportp);
+ > #        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ > spice-vdagent-0.19.0/src/vdagentd/virtio-port.c:130:5: note: Taking false branch
+ > #    if (!vport)
+ > #    ^
+ > spice-vdagent-0.19.0/src/vdagentd/virtio-port.c:133:9: note: Assuming the condition is false
+ > #    if (vport->disconnect_callback)
+ > #        ^~~~~~~~~~~~~~~~~~~~~~~~~~
+ > spice-vdagent-0.19.0/src/vdagentd/virtio-port.c:133:5: note: Taking false branch
+ > #    if (vport->disconnect_callback)
+ > #    ^
+ > spice-vdagent-0.19.0/src/vdagentd/virtio-port.c:137:5: note: Loop condition is true.  Entering loop body
+ > #    while (wbuf) {
+ > #    ^
+ > spice-vdagent-0.19.0/src/vdagentd/virtio-port.c:140:9: note: Memory is released
+ > #        g_free(wbuf);
+ > #        ^~~~~~~~~~~~
+ > spice-vdagent-0.19.0/src/vdagentd/virtio-port.c:137:5: note: Loop condition is false. Execution continues on line 144
+ > #    while (wbuf) {
+ > #    ^
+ > spice-vdagent-0.19.0/src/vdagentd/virtio-port.c:144:5: note: Loop condition is true.  Entering loop body
+ > #    for (i = 0; i < VDP_END_PORT; i++) {
+ > #    ^
+ > spice-vdagent-0.19.0/src/vdagentd/virtio-port.c:144:5: note: Loop condition is true.  Entering loop body
+ > spice-vdagent-0.19.0/src/vdagentd/virtio-port.c:144:5: note: Loop condition is true.  Entering loop body
+ > spice-vdagent-0.19.0/src/vdagentd/virtio-port.c:144:5: note: Loop condition is false. Execution continues on line 148
+ > spice-vdagent-0.19.0/src/vdagentd/virtio-port.c:149:5: note: Assuming '_p' is null
+ > #    g_clear_pointer(vportp, g_free);
+ > #    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ > /usr/include/glib-2.0/glib/gmem.h:124:9: note: expanded from macro 'g_clear_pointer'
+ > #    if (_p)                                                                    \
+ > #        ^~
+ > spice-vdagent-0.19.0/src/vdagentd/virtio-port.c:149:5: note: Taking false branch
+ > /usr/include/glib-2.0/glib/gmem.h:124:5: note: expanded from macro 'g_clear_pointer'
+ > #    if (_p)                                                                    \
+ > #    ^
+ > spice-vdagent-0.19.0/src/vdagentd/virtio-port.c:149:5: note: Loop condition is false.  Exiting loop
+ > /usr/include/glib-2.0/glib/gmem.h:114:3: note: expanded from macro 'g_clear_pointer'
+ > #  G_STMT_START {                                                               \
+ > #  ^
+ > /usr/include/glib-2.0/glib/gmacros.h:346:23: note: expanded from macro 'G_STMT_START'
+ > ##define G_STMT_START  do
+ > #                      ^
+ > spice-vdagent-0.19.0/src/vdagentd/virtio-port.c:469:9: note: Returning; memory was released
+ > #        vdagent_virtio_port_destroy(vportp);
+ > #        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ > spice-vdagent-0.19.0/src/vdagentd/virtio-port.c:269:9: note: Returning; memory was released
+ > #        vdagent_virtio_port_do_write(vportp);
+ > #        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ > spice-vdagent-0.19.0/src/vdagentd/virtio-port.c:268:12: note: Left side of '&&' is true
+ > #    while (*vportp && (*vportp)->write_buf)
+ > #           ^
+ > spice-vdagent-0.19.0/src/vdagentd/virtio-port.c:268:5: note: Loop condition is true.  Entering loop body
+ > #    while (*vportp && (*vportp)->write_buf)
+ > #    ^
+ > spice-vdagent-0.19.0/src/vdagentd/virtio-port.c:269:9: note: Calling 'vdagent_virtio_port_do_write'
+ > #        vdagent_virtio_port_do_write(vportp);
+ > #        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ > spice-vdagent-0.19.0/src/vdagentd/virtio-port.c:453:5: note: Taking false branch
+ > #    if (!wbuf) {
+ > #    ^
+ > spice-vdagent-0.19.0/src/vdagentd/virtio-port.c:458:9: note: Use of memory after it is freed
+ > #    if (wbuf->write_pos != wbuf->size) {
+ > #        ^~~~~~~~~~~~~~~
+ > #  456|       }
+ > #  457|
+ > #  458|->     if (wbuf->write_pos != wbuf->size) {
+ > #  459|           syslog(LOG_ERR, "do_write: buffer is incomplete!!");
+ > #  460|           return;
+
+Signed-off-by: Victor Toso <victortoso@redhat.com>
+Acked-by: Frediano Ziglio <fziglio@redhat.com>
+---
+ src/vdagentd/virtio-port.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/vdagentd/virtio-port.c b/src/vdagentd/virtio-port.c
+index b0556ce..3ae7f22 100644
+--- a/src/vdagentd/virtio-port.c
++++ b/src/vdagentd/virtio-port.c
+@@ -146,7 +146,8 @@ void vdagent_virtio_port_destroy(struct vdagent_virtio_port **vportp)
+     }
+ 
+     close(vport->fd);
+-    g_clear_pointer(vportp, g_free);
++    g_free(vport);
++    *vportp = NULL;
+ }
+ 
+ int vdagent_virtio_port_fill_fds(struct vdagent_virtio_port *vport,
+-- 
+2.23.0
+

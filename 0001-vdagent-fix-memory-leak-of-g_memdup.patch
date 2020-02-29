@@ -1,0 +1,57 @@
+From b6fde1641a47c13b151b20c8e0db03cf7da45d9f Mon Sep 17 00:00:00 2001
+From: Victor Toso <me@victortoso.com>
+Date: Fri, 12 Jul 2019 11:12:37 +0200
+Subject: [PATCH 01/23] vdagent: fix memory leak of g_memdup()
+
+Found by covscan:
+
+ | spice-vdagent-0.19.0/src/vdagent/vdagent.c:432:9: warning: Potential leak of memory pointed to by 'orig_argv'
+ | #        g_printerr("Invalid arguments, %s\n", error->message);
+ | #        ^
+ | spice-vdagent-0.19.0/src/vdagent/vdagent.c:418:24: note: Memory is allocated
+ | #    char **orig_argv = g_memdup(argv, sizeof(char*) * (argc+1));
+ | #                       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ | spice-vdagent-0.19.0/src/vdagent/vdagent.c:431:9: note: Assuming 'error' is not equal to NULL
+ | #    if (error != NULL) {
+ | #        ^~~~~~~~~~~~~
+ | spice-vdagent-0.19.0/src/vdagent/vdagent.c:431:5: note: Taking true branch
+ | #    if (error != NULL) {
+ | #    ^
+ | spice-vdagent-0.19.0/src/vdagent/vdagent.c:432:9: note: Potential leak of memory pointed to by 'orig_argv'
+ | #        g_printerr("Invalid arguments, %s\n", error->message);
+ | #        ^
+ | #  430|
+ | #  431|       if (error != NULL) {
+ | #  432|->         g_printerr("Invalid arguments, %s\n", error->message);
+ | #  433|           g_clear_error(&error);
+ | #  434|           return -1;
+
+Signed-off-by: Victor Toso <victortoso@redhat.com>
+Acked-by: Frediano Ziglio <fziglio@redhat.com>
+---
+ src/vdagent/vdagent.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/vdagent/vdagent.c b/src/vdagent/vdagent.c
+index 13ef29f..d799d1f 100644
+--- a/src/vdagent/vdagent.c
++++ b/src/vdagent/vdagent.c
+@@ -431,6 +431,7 @@ int main(int argc, char *argv[])
+     if (error != NULL) {
+         g_printerr("Invalid arguments, %s\n", error->message);
+         g_clear_error(&error);
++        g_free(orig_argv);
+         return -1;
+     }
+ 
+@@ -446,6 +447,7 @@ int main(int argc, char *argv[])
+ 
+     if (!g_file_test(portdev, G_FILE_TEST_EXISTS)) {
+         g_debug("vdagent virtio channel %s does not exist, exiting", portdev);
++        g_free(orig_argv);
+         return 0;
+     }
+ 
+-- 
+2.23.0
+

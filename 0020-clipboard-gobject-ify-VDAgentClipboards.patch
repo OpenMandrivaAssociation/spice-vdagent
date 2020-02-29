@@ -1,0 +1,183 @@
+From e9f6a513cf3646b76e6907575b708751c1735bb3 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Marc-Andr=C3=A9=20Lureau?= <marcandre.lureau@redhat.com>
+Date: Fri, 22 Mar 2019 16:12:43 +0100
+Subject: [PATCH 20/23] clipboard: gobject-ify VDAgentClipboards
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This will allow easier lifecycle management,
+and usage of gtk_clipboard_set_with_owner()
+
+Signed-off-by: Marc-André Lureau <marcandre.lureau@redhat.com>
+---
+ src/vdagent/clipboard.c | 67 +++++++++++++++++++++++++++--------------
+ src/vdagent/clipboard.h | 12 +++++---
+ src/vdagent/vdagent.c   |  7 +++--
+ 3 files changed, 56 insertions(+), 30 deletions(-)
+
+diff --git a/src/vdagent/clipboard.c b/src/vdagent/clipboard.c
+index 1e49248..cf6e344 100644
+--- a/src/vdagent/clipboard.c
++++ b/src/vdagent/clipboard.c
+@@ -76,15 +76,25 @@ typedef struct {
+ } Selection;
+ #endif
+ 
+-struct VDAgentClipboards {
+-#ifdef WITH_GTK
++struct _VDAgentClipboards {
++    GObject parent;
++
+     struct udscs_connection *conn;
+-    Selection                selections[SELECTION_COUNT];
++
++#ifdef WITH_GTK
++    Selection selections[SELECTION_COUNT];
+ #else
+     struct vdagent_x11 *x11;
+ #endif
+ };
+ 
++struct _VDAgentClipboardsClass
++{
++    GObjectClass parent;
++};
++
++G_DEFINE_TYPE(VDAgentClipboards, vdagent_clipboards, G_TYPE_OBJECT)
++
+ #ifdef WITH_GTK
+ static const struct {
+     guint         type;
+@@ -453,43 +463,56 @@ err:
+ #endif
+ }
+ 
+-VDAgentClipboards *vdagent_clipboards_init(struct vdagent_x11      *x11,
+-                                           struct udscs_connection *conn)
++static void
++vdagent_clipboards_init(VDAgentClipboards *self)
+ {
+-#ifdef WITH_GTK
+-    guint sel_id;
+-#endif
++}
++
++VDAgentClipboards *vdagent_clipboards_new(struct vdagent_x11 *x11)
++{
++    VDAgentClipboards *self = g_object_new(VDAGENT_TYPE_CLIPBOARDS, NULL);
+ 
+-    VDAgentClipboards *c;
+-    c = g_new0(VDAgentClipboards, 1);
+ #ifndef WITH_GTK
+-    c->x11 = x11;
++    self->x11 = x11;
+ #else
+-    c->conn = conn;
++    guint sel_id;
+ 
+     for (sel_id = 0; sel_id < SELECTION_COUNT; sel_id++) {
+         GtkClipboard *clipboard = gtk_clipboard_get(sel_atom[sel_id]);
+-        c->selections[sel_id].clipboard = clipboard;
++        self->selections[sel_id].clipboard = clipboard;
+         g_signal_connect(G_OBJECT(clipboard), "owner-change",
+-                         G_CALLBACK(clipboard_owner_change_cb), c);
++                         G_CALLBACK(clipboard_owner_change_cb), self);
+     }
+ #endif
+ 
+-    return c;
++    return self;
+ }
+ 
+-void vdagent_clipboards_finalize(VDAgentClipboards *c, gboolean conn_alive)
++void
++vdagent_clipboards_set_conn(VDAgentClipboards *self, struct udscs_connection *conn)
++{
++    self->conn = conn;
++}
++
++static void vdagent_clipboards_dispose(GObject *obj)
+ {
+ #ifdef WITH_GTK
++    VDAgentClipboards *self = VDAGENT_CLIPBOARDS(obj);
+     guint sel_id;
++
+     for (sel_id = 0; sel_id < SELECTION_COUNT; sel_id++)
+-        g_signal_handlers_disconnect_by_func(c->selections[sel_id].clipboard,
+-            G_CALLBACK(clipboard_owner_change_cb), c);
++        g_signal_handlers_disconnect_by_func(self->selections[sel_id].clipboard,
++            G_CALLBACK(clipboard_owner_change_cb), self);
+ 
+-    if (conn_alive == FALSE)
+-        c->conn = NULL;
+-    vdagent_clipboards_release_all(c);
++    if (self->conn)
++        vdagent_clipboards_release_all(self);
+ #endif
++}
++
++static void
++vdagent_clipboards_class_init(VDAgentClipboardsClass *klass)
++{
++    GObjectClass *oclass = G_OBJECT_CLASS(klass);
+ 
+-    g_free(c);
++    oclass->dispose = vdagent_clipboards_dispose;
+ }
+diff --git a/src/vdagent/clipboard.h b/src/vdagent/clipboard.h
+index f819b49..cd8eacb 100644
+--- a/src/vdagent/clipboard.h
++++ b/src/vdagent/clipboard.h
+@@ -19,16 +19,18 @@
+ #ifndef __VDAGENT_CLIPBOARD_H
+ #define __VDAGENT_CLIPBOARD_H
+ 
+-#include <glib.h>
++#include <glib-object.h>
+ 
+ #include "x11.h"
+ #include "udscs.h"
+ 
+-typedef struct VDAgentClipboards VDAgentClipboards;
++#define VDAGENT_TYPE_CLIPBOARDS vdagent_clipboards_get_type()
++G_DECLARE_FINAL_TYPE(VDAgentClipboards, vdagent_clipboards, VDAGENT, CLIPBOARDS, GObject)
+ 
+-VDAgentClipboards *vdagent_clipboards_init(struct vdagent_x11      *x11,
+-                                           struct udscs_connection *conn);
+-void vdagent_clipboards_finalize(VDAgentClipboards *c, gboolean conn_alive);
++VDAgentClipboards *vdagent_clipboards_new(struct vdagent_x11 *x11);
++
++void vdagent_clipboards_set_conn(VDAgentClipboards *self,
++                                 struct udscs_connection *conn);
+ 
+ void vdagent_clipboard_request(VDAgentClipboards *c, guint sel_id, guint type);
+ 
+diff --git a/src/vdagent/vdagent.c b/src/vdagent/vdagent.c
+index e799602..db85eca 100644
+--- a/src/vdagent/vdagent.c
++++ b/src/vdagent/vdagent.c
+@@ -165,8 +165,8 @@ static void vdagent_quit_loop(VDAgent *agent)
+ {
+     /* other GMainLoop(s) might be running, quit them before agent->loop */
+     if (agent->clipboards) {
+-        vdagent_clipboards_finalize(agent->clipboards, agent->conn != NULL);
+-        agent->clipboards = NULL;
++        vdagent_clipboards_set_conn(agent->clipboards, agent->conn);
++        g_clear_object(&agent->clipboards);
+     }
+     if (agent->loop)
+         g_main_loop_quit(agent->loop);
+@@ -403,7 +403,8 @@ static gboolean vdagent_init_async_cb(gpointer user_data)
+     if (!vdagent_init_file_xfer(agent))
+         syslog(LOG_WARNING, "File transfer is disabled");
+ 
+-    agent->clipboards = vdagent_clipboards_init(agent->x11, agent->conn);
++    agent->clipboards = vdagent_clipboards_new(agent->x11);
++    vdagent_clipboards_set_conn(agent->clipboards, agent->conn);
+ 
+     if (parent_socket != -1) {
+         if (write(parent_socket, "OK", 2) != 2)
+-- 
+2.23.0
+

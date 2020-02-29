@@ -1,0 +1,88 @@
+From cedab5fe0e40e756a387013f59b257dd9f4f24cd Mon Sep 17 00:00:00 2001
+From: Victor Toso <me@victortoso.com>
+Date: Mon, 26 Aug 2019 17:03:22 +0200
+Subject: [PATCH 11/23] covscan: initialize argv's copy
+
+Otherwise we get a CLANG_WARNING due accessing garbage.
+
+Covscan report:
+ > spice-vdagent-0.19.0/src/vdagent/vdagent.c:471:9: warning: 1st function call argument is an uninitialized value
+ > #        execvp(orig_argv[0], orig_argv);
+ > #        ^      ~~~~~~~~~~~~
+ > spice-vdagent-0.19.0/src/vdagent/vdagent.c:421:24: note: Storing uninitialized value
+ > #    char **orig_argv = g_memdup(argv, sizeof(char*) * (argc+1));
+ > #                       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ > spice-vdagent-0.19.0/src/vdagent/vdagent.c:434:9: note: Assuming 'error' is equal to NULL
+ > #    if (error != NULL) {
+ > #        ^~~~~~~~~~~~~
+ > spice-vdagent-0.19.0/src/vdagent/vdagent.c:434:5: note: Taking false branch
+ > #    if (error != NULL) {
+ > #    ^
+ > spice-vdagent-0.19.0/src/vdagent/vdagent.c:442:9: note: Assuming 'portdev' is not equal to NULL
+ > #    if (portdev == NULL)
+ > #        ^~~~~~~~~~~~~~~
+ > spice-vdagent-0.19.0/src/vdagent/vdagent.c:442:5: note: Taking false branch
+ > #    if (portdev == NULL)
+ > #    ^
+ > spice-vdagent-0.19.0/src/vdagent/vdagent.c:445:9: note: Assuming 'vdagentd_socket' is not equal to NULL
+ > #    if (vdagentd_socket == NULL)
+ > #        ^~~~~~~~~~~~~~~~~~~~~~~
+ > spice-vdagent-0.19.0/src/vdagent/vdagent.c:445:5: note: Taking false branch
+ > #    if (vdagentd_socket == NULL)
+ > #    ^
+ > spice-vdagent-0.19.0/src/vdagent/vdagent.c:448:30: note: Assuming 'do_daemonize' is 0
+ > #    openlog("spice-vdagent", do_daemonize ? LOG_PID : (LOG_PID | LOG_PERROR),
+ > #                             ^~~~~~~~~~~~
+ > spice-vdagent-0.19.0/src/vdagent/vdagent.c:448:30: note: '?' condition is false
+ > spice-vdagent-0.19.0/src/vdagent/vdagent.c:451:9: note: Assuming the condition is false
+ > #    if (!g_file_test(portdev, G_FILE_TEST_EXISTS)) {
+ > #        ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ > spice-vdagent-0.19.0/src/vdagent/vdagent.c:451:5: note: Taking false branch
+ > #    if (!g_file_test(portdev, G_FILE_TEST_EXISTS)) {
+ > #    ^
+ > spice-vdagent-0.19.0/src/vdagent/vdagent.c:457:9: note: Assuming 'do_daemonize' is 0
+ > #    if (do_daemonize)
+ > #        ^~~~~~~~~~~~
+ > spice-vdagent-0.19.0/src/vdagent/vdagent.c:457:5: note: Taking false branch
+ > #    if (do_daemonize)
+ > #    ^
+ > spice-vdagent-0.19.0/src/vdagent/vdagent.c:468:9: note: Assuming 'version_mismatch' is not equal to 0
+ > #    if (version_mismatch) {
+ > #        ^~~~~~~~~~~~~~~~
+ > spice-vdagent-0.19.0/src/vdagent/vdagent.c:468:5: note: Taking true branch
+ > #    if (version_mismatch) {
+ > #    ^
+ > spice-vdagent-0.19.0/src/vdagent/vdagent.c:471:9: note: 1st function call argument is an uninitialized value
+ > #        execvp(orig_argv[0], orig_argv);
+ > #        ^      ~~~~~~~~~~~~
+ > #  469|           syslog(LOG_INFO, "Version mismatch, restarting");
+ > #  470|           sleep(1);
+ > #  471|->         execvp(orig_argv[0], orig_argv);
+ > #  472|       }
+ > #  473|
+
+Signed-off-by: Victor Toso <victortoso@redhat.com>
+Acked-by: Uri Lublin <uril@redhat.com>
+---
+ src/vdagent/vdagent.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/src/vdagent/vdagent.c b/src/vdagent/vdagent.c
+index 0e2e73e..5b146db 100644
+--- a/src/vdagent/vdagent.c
++++ b/src/vdagent/vdagent.c
+@@ -418,7 +418,10 @@ int main(int argc, char *argv[])
+     GOptionContext *context;
+     GError *error = NULL;
+     VDAgent *agent;
+-    char **orig_argv = g_memdup(argv, sizeof(char*) * (argc+1));
++    char **orig_argv;
++
++    orig_argv = g_memdup(argv, sizeof(char*) * (argc+1));
++    orig_argv[argc] = NULL;
+ 
+     context = g_option_context_new(NULL);
+     g_option_context_add_main_entries(context, entries, NULL);
+-- 
+2.23.0
+
