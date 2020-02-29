@@ -103,7 +103,7 @@ autoreconf -fi
 %{_udevrulesdir}/70-spice-vdagentd.rules
 %{_unitdir}/spice-vdagentd.service
 %{_unitdir}/spice-vdagentd.socket
-%{_tmpfilesdir}/%{dname}.conf
+%{_tmpfilesdir}/spice-vdagentd.conf
 %{_bindir}/spice-vdagent
 %{_sbindir}/spice-vdagentd
 %{_sysconfdir}/xdg/autostart/spice-vdagent.desktop
