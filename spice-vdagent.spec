@@ -99,17 +99,15 @@ autoreconf -fi
 %systemd_postun_with_restart spice-vdagentd.service
 
 %files
-%doc COPYING ChangeLog README TODO
-%config(noreplace) %{_sysconfdir}/rsyslog.d/spice-vdagentd.conf
-/lib/udev/rules.d/70-spice-vdagentd.rules
+%doc COPYING CHANGELOG.md README.md
+%{_udevrulesdir}/70-spice-vdagentd.rules
 %{_unitdir}/spice-vdagentd.service
-%{_unitdir}/spice-vdagentd.target
-%{_prefix}/lib/tmpfiles.d/spice-vdagentd.conf
+%{_unitdir}/spice-vdagentd.socket
+%{_tmpfilesdir}/%{dname}.conf
 %{_bindir}/spice-vdagent
 %{_sbindir}/spice-vdagentd
-%{_var}/run/spice-vdagentd
-%{_sysconfdir}/modules-load.d/spice-vdagentd.conf
 %{_sysconfdir}/xdg/autostart/spice-vdagent.desktop
 # For /usr/share/gdm/autostart/LoginWindow/spice-vdagent.desktop
 # We own the dir too, otherwise we must Require gdm
 %{_datadir}/gdm
+%{_mandir}/man1/%{name}*.1*
