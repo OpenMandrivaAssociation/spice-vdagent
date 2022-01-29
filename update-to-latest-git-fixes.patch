@@ -1,0 +1,288 @@
+diff --git a/Makefile.am b/Makefile.am
+index e8fa4a6..9c30bae 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -167,6 +167,10 @@ systemdunit_DATA = \
+ 	$(top_srcdir)/data/spice-vdagentd.service \
+ 	$(top_srcdir)/data/spice-vdagentd.socket
+ 
++userunitdir = $(SYSTEMDUSERUNITDIR)
++userunit_DATA = \
++	$(top_srcdir)/data/spice-vdagent.service
++
+ udevrulesdir = $(udevdir)/rules.d
+ udevrules_DATA = $(top_srcdir)/data/70-spice-vdagentd.rules
+ 
+@@ -185,6 +189,7 @@ EXTRA_DIST =					\
+ 	CHANGELOG.md				\
+ 	data/70-spice-vdagentd.rules		\
+ 	data/spice-vdagent.desktop		\
++	data/spice-vdagent.service	   	\
+ 	data/spice-vdagentd			\
+ 	data/spice-vdagentd.service		\
+ 	data/spice-vdagentd.socket		\
+diff --git a/configure.ac b/configure.ac
+index 8b3db35..be65606 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -64,7 +64,9 @@ AC_MSG_RESULT($with_init_script)
+ 
+ if test "x$init_systemd" = "xyes"; then
+   SYSTEMDSYSTEMUNITDIR=`${PKG_CONFIG} systemd --variable=systemdsystemunitdir`
++  SYSTEMDUSERUNITDIR=`${PKG_CONFIG} systemd --variable=systemduserunitdir`
+   AC_SUBST(SYSTEMDSYSTEMUNITDIR)
++  AC_SUBST(SYSTEMDUSERUNITDIR)
+   # earlier versions of systemd require a separate libsystemd-daemon library
+   PKG_CHECK_MODULES([LIBSYSTEMD_DAEMON],
+                     [libsystemd >= 209],
+@@ -87,7 +89,7 @@ AC_ARG_WITH([gtk4],
+                [Use GTK4 instead of Xlib @<:@default=no@:>@])],
+             [],
+             [with_gtk4="no"])
+-if test "x$with_gtk4" == "xyes"; then
++if test "x$with_gtk4" = "xyes"; then
+     PKG_CHECK_MODULES([GTK], [gtk4 >= 3.98], [
+                      AC_DEFINE([WITH_GTK], [1], [If defined, load GTK+ libraries])
+                      AC_DEFINE([USE_GTK_FOR_MONITORS], [1], [If defined, use GTK for monitor resolution instead of XRandr])
+@@ -124,6 +126,10 @@ PKG_CHECK_MODULES(ALSA, [alsa >= 1.0.22])
+ PKG_CHECK_MODULES([DBUS], [dbus-1])
+ PKG_CHECK_MODULES([DRM], [libdrm])
+ 
++PKG_CHECK_MODULES([GLIB], [glib-2.0 >= 2.68], [], [
++    AC_DEFINE(g_memdup2, g_memdup, [GLib2 < 2.68 compatibility])
++])
++
+ if test "$with_session_info" = "auto" || test "$with_session_info" = "systemd"; then
+     PKG_CHECK_MODULES([LIBSYSTEMD_LOGIN],
+                       [libsystemd >= 209],
+@@ -172,7 +178,7 @@ if test x"$enable_static_uinput" = "xyes" ; then
+ fi
+ 
+ # If no CFLAGS are set, set some sane default CFLAGS
+-if test "$ac_test_CFLAGS" != set; then
++if test -z "$ac_test_CFLAGS"; then
+   DEFAULT_CFLAGS="-Wall -Werror -Wp,-D_FORTIFY_SOURCE=2 -fno-strict-aliasing -fstack-protector --param=ssp-buffer-size=4"
+   for F in $DEFAULT_CFLAGS; do
+     AC_MSG_CHECKING([whether $CC supports $F])
+diff --git a/data/spice-vdagent.service b/data/spice-vdagent.service
+new file mode 100644
+index 0000000..a18f4ff
+--- /dev/null
++++ b/data/spice-vdagent.service
+@@ -0,0 +1,5 @@
++[Unit]
++Description=Spice guest session agent
++
++[Service]
++ExecStart=/usr/bin/spice-vdagent -x
+diff --git a/src/udscs.c b/src/udscs.c
+index 3df67b3..6c50f76 100644
+--- a/src/udscs.c
++++ b/src/udscs.c
+@@ -107,16 +107,14 @@ static void udscs_connection_class_init(UdscsConnectionClass *klass)
+ UdscsConnection *udscs_connect(const char *socketname,
+     udscs_read_callback read_callback,
+     VDAgentConnErrorCb error_cb,
+-    int debug)
++    int debug,
++    GError **err)
+ {
+     GIOStream *io_stream;
+     UdscsConnection *conn;
+-    GError *err = NULL;
+ 
+-    io_stream = vdagent_socket_connect(socketname, &err);
+-    if (err) {
+-        syslog(LOG_ERR, "%s: %s", __func__, err->message);
+-        g_error_free(err);
++    io_stream = vdagent_socket_connect(socketname, err);
++    if (*err) {
+         return NULL;
+     }
+ 
+diff --git a/src/udscs.h b/src/udscs.h
+index 4f7ea36..0d4197b 100644
+--- a/src/udscs.h
++++ b/src/udscs.h
+@@ -53,11 +53,14 @@ typedef void (*udscs_read_callback)(UdscsConnection *conn,
+  *
+  * If debug is true then the events on this connection will be traced.
+  * This includes the incoming and outgoing message names.
++ *
++ * In case of failure, returns NULL and set @err with reason.
+  */
+ UdscsConnection *udscs_connect(const char *socketname,
+     udscs_read_callback read_callback,
+     VDAgentConnErrorCb error_cb,
+-    int debug);
++    int debug,
++    GError **err);
+ 
+ /* Queue a message for delivery to the client connected through conn.
+  */
+diff --git a/src/vdagent/vdagent.c b/src/vdagent/vdagent.c
+index 0c69907..05d1a8f 100644
+--- a/src/vdagent/vdagent.c
++++ b/src/vdagent/vdagent.c
+@@ -42,11 +42,14 @@
+ #include "clipboard.h"
+ #include "display.h"
+ 
++#define MAX_RETRY_CONNECT_SYSTEM_AGENT 60
++
+ typedef struct VDAgent {
+     VDAgentClipboards *clipboards;
+     VDAgentDisplay *display;
+     struct vdagent_file_xfers *xfers;
+     UdscsConnection *conn;
++    gint udscs_num_retry;
+ 
+     GMainLoop *loop;
+ } VDAgent;
+@@ -228,7 +231,7 @@ static void daemon_read_complete(UdscsConnection *conn,
+         break;
+     case VDAGENTD_AUDIO_VOLUME_SYNC: {
+         VDAgentAudioVolumeSync *avs = (VDAgentAudioVolumeSync *)data;
+-        uint16_t *volume = g_memdup(avs->volume, sizeof(uint16_t) * avs->nchannels);
++        uint16_t *volume = g_memdup2(avs->volume, sizeof(uint16_t) * avs->nchannels);
+ 
+         if (avs->is_playback) {
+             vdagent_audio_playback_sync(avs->mute, avs->nchannels, volume);
+@@ -373,14 +376,38 @@ static void vdagent_destroy(VDAgent *agent)
+ static gboolean vdagent_init_async_cb(gpointer user_data)
+ {
+     VDAgent *agent = user_data;
++    GError *err = NULL;
+ 
+     agent->conn = udscs_connect(vdagentd_socket,
+-                                daemon_read_complete, daemon_error_cb,
+-                                debug);
++                                daemon_read_complete,
++                                daemon_error_cb,
++                                debug,
++                                &err);
+     if (agent->conn == NULL) {
++        if (agent->udscs_num_retry == MAX_RETRY_CONNECT_SYSTEM_AGENT) {
++            syslog(LOG_WARNING,
++                   "Failed to connect to spice-vdagentd at %s (tried %d times)",
++                   vdagentd_socket, agent->udscs_num_retry);
++            g_error_free(err);
++            goto err_init;
++        }
++        if (agent->udscs_num_retry == 0) {
++            /* Log only when it fails and at the end */
++            syslog(LOG_DEBUG,
++                   "Failed to connect with spice-vdagentd due '%s'. Trying again in 1s",
++                   err->message);
++        }
++        g_error_free(err);
++        agent->udscs_num_retry++;
+         g_timeout_add_seconds(1, vdagent_init_async_cb, agent);
+         return G_SOURCE_REMOVE;
+     }
++    if (agent->udscs_num_retry != 0) {
++        syslog(LOG_DEBUG,
++               "Connected with spice-vdagentd after %d attempts",
++               agent->udscs_num_retry);
++    }
++    agent->udscs_num_retry = 0;
+     g_object_set_data(G_OBJECT(agent->conn), "agent", agent);
+ 
+     agent->display = vdagent_display_create(agent->conn, debug, x11_sync);
+@@ -414,7 +441,7 @@ int main(int argc, char *argv[])
+     GOptionContext *context;
+     GError *error = NULL;
+     VDAgent *agent;
+-    char **orig_argv = g_memdup(argv, sizeof(char*) * (argc+1));
++    char **orig_argv = g_memdup2(argv, sizeof(char*) * (argc+1));
+     orig_argv[argc] = NULL; /* To avoid clang analyzer false-positive */
+ 
+     context = g_option_context_new(NULL);
+diff --git a/src/vdagent/x11-randr.c b/src/vdagent/x11-randr.c
+index 27404a1..037aded 100644
+--- a/src/vdagent/x11-randr.c
++++ b/src/vdagent/x11-randr.c
+@@ -982,7 +982,7 @@ void vdagent_x11_set_monitor_config(struct vdagent_x11 *x11,
+                    fullscreen it will keep sending the failing config. */
+                 g_free(x11->randr.failed_conf);
+                 x11->randr.failed_conf =
+-                    g_memdup(mon_config, config_size(mon_config->num_of_monitors));
++                    g_memdup2(mon_config, config_size(mon_config->num_of_monitors));
+                 return;
+             }
+         }
+diff --git a/src/vdagentd/uinput.c b/src/vdagentd/uinput.c
+index ff37e1e..e50e095 100644
+--- a/src/vdagentd/uinput.c
++++ b/src/vdagentd/uinput.c
+@@ -140,6 +140,8 @@ void vdagentd_uinput_update_size(struct vdagentd_uinput **uinputp,
+     ioctl(uinput->fd, UI_SET_KEYBIT, BTN_LEFT);
+     ioctl(uinput->fd, UI_SET_KEYBIT, BTN_MIDDLE);
+     ioctl(uinput->fd, UI_SET_KEYBIT, BTN_RIGHT);
++    ioctl(uinput->fd, UI_SET_KEYBIT, BTN_SIDE);
++    ioctl(uinput->fd, UI_SET_KEYBIT, BTN_EXTRA);
+ 
+     /* wheel */
+     ioctl(uinput->fd, UI_SET_EVBIT, EV_REL);
+@@ -200,6 +202,8 @@ void vdagentd_uinput_do_mouse(struct vdagentd_uinput **uinputp,
+         { .name = "left",   .mask =  VD_AGENT_LBUTTON_MASK, .btn = BTN_LEFT      },
+         { .name = "middle", .mask =  VD_AGENT_MBUTTON_MASK, .btn = BTN_MIDDLE    },
+         { .name = "right",  .mask =  VD_AGENT_RBUTTON_MASK, .btn = BTN_RIGHT     },
++        { .name = "side" ,  .mask =  VD_AGENT_SBUTTON_MASK, .btn = BTN_SIDE      },
++        { .name = "extra" , .mask =  VD_AGENT_EBUTTON_MASK, .btn = BTN_EXTRA     },
+     };
+     static const struct button_s wheel[] = {
+         { .name = "up",     .mask =  VD_AGENT_UBUTTON_MASK, .btn = 1  },
+diff --git a/src/vdagentd/vdagentd.c b/src/vdagentd/vdagentd.c
+index 78378aa..3e59331 100644
+--- a/src/vdagentd/vdagentd.c
++++ b/src/vdagentd/vdagentd.c
+@@ -216,7 +216,7 @@ static void do_client_monitors(VirtioPort *vport, int port_nr,
+     vdagentd_write_xorg_conf(new_monitors);
+ 
+     g_free(mon_config);
+-    mon_config = g_memdup(new_monitors, size);
++    mon_config = g_memdup2(new_monitors, size);
+ 
+     /* Send monitor config to currently active agent */
+     if (active_session_conn)
+@@ -249,7 +249,7 @@ static void do_client_capabilities(VirtioPort *vport,
+ {
+     capabilities_size = VD_AGENT_CAPS_SIZE_FROM_MSG_SIZE(message_header->size);
+     g_free(capabilities);
+-    capabilities = g_memdup(caps->caps, capabilities_size * sizeof(uint32_t));
++    capabilities = g_memdup2(caps->caps, capabilities_size * sizeof(uint32_t));
+ 
+     if (caps->request) {
+         /* Report the previous client has disconnected. */
+@@ -647,7 +647,7 @@ static void virtio_port_read_complete(
+     case VD_AGENT_GRAPHICS_DEVICE_INFO: {
+         // store device info for re-sending when a session agent reconnects
+         g_free(device_info);
+-        device_info = g_memdup(data, message_header->size);
++        device_info = g_memdup2(data, message_header->size);
+         device_info_size = message_header->size;
+         forward_data_to_session_agent(VDAGENTD_GRAPHICS_DEVICE_INFO, data, message_header->size);
+         break;
+@@ -1090,7 +1090,7 @@ static void do_agent_xorg_resolution(UdscsConnection             *conn,
+     }
+ 
+     g_free(agent_data->screen_info);
+-    agent_data->screen_info = g_memdup(data, header->size);
++    agent_data->screen_info = g_memdup2(data, header->size);
+     agent_data->width  = header->arg1;
+     agent_data->height = header->arg2;
+     agent_data->screen_count = n;
+diff --git a/tests/test-termination.c b/tests/test-termination.c
+index 5f9f221..1562bfb 100644
+--- a/tests/test-termination.c
++++ b/tests/test-termination.c
+@@ -59,7 +59,7 @@ static void check(int line, const char *cond_str, int cond_value)
+ static pid_t get_daemon_pid(void)
+ {
+     pid_t res = 0;
+-    FILE *f = popen("ps -ef", "r");
++    FILE *f = popen("ps -efww", "r");
+     check(f != NULL);
+     char line[1024];
+     while (fgets(line, sizeof(line), f)) {

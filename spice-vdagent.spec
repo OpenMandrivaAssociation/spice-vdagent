@@ -6,6 +6,7 @@ Group:		System/Kernel and hardware
 License:	GPLv3+
 URL:		http://spice-space.org/
 Source0:	http://spice-space.org/download/releases/%{name}-%{version}.tar.bz2
+Patch0:		update-to-latest-git-fixes.patch
 
 #######################################################################
 #Cross patches for spice-gtk, spice-protocol and spice-vdagent (angry)#
@@ -73,6 +74,7 @@ autoreconf -fi
 %{_bindir}/spice-vdagent
 %{_sbindir}/spice-vdagentd
 %{_sysconfdir}/xdg/autostart/spice-vdagent.desktop
+%{_userunitdir}/spice-vdagent.service
 # For /usr/share/gdm/autostart/LoginWindow/spice-vdagent.desktop
 # We own the dir too, otherwise we must Require gdm
 %{_datadir}/gdm
