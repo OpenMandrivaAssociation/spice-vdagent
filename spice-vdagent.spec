@@ -1,12 +1,11 @@
 Name:		spice-vdagent
-Version:	0.21.0
-Release:	2
+Version:	0.22.1
+Release:	1
 Summary:	Agent for Spice guests
 Group:		System/Kernel and hardware
 License:	GPLv3+
 URL:		http://spice-space.org/
 Source0:	http://spice-space.org/download/releases/%{name}-%{version}.tar.bz2
-Patch0:		update-to-latest-git-fixes.patch
 
 #######################################################################
 #Cross patches for spice-gtk, spice-protocol and spice-vdagent (angry)#
