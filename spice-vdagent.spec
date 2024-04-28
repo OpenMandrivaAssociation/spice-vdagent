@@ -1,6 +1,6 @@
 Name:		spice-vdagent
 Version:	0.22.1
-Release:	2
+Release:	3
 Summary:	Agent for Spice guests
 Group:		System/Kernel and hardware
 License:	GPLv3+
@@ -54,15 +54,6 @@ autoreconf -fi
 
 %install
 %make_install
-
-%post
-%_post_service spice-vdagentd.service
-
-%preun
-%_preun_service spice-vdagentd.service
-
-%postun
-%systemd_postun_with_restart spice-vdagentd.service
 
 %files
 %doc COPYING CHANGELOG.md README.md
