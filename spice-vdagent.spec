@@ -4,7 +4,7 @@ Release:	3
 Summary:	Agent for Spice guests
 Group:		System/Kernel and hardware
 License:	GPLv3+
-URL:		http://spice-space.org/
+URL:		https://spice-space.org/
 Source0:	http://spice-space.org/download/releases/%{name}-%{version}.tar.bz2
 
 #######################################################################
