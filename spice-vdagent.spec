@@ -11,6 +11,11 @@ Source0:	http://spice-space.org/download/releases/%{name}-%{version}.tar.bz2
 #Cross patches for spice-gtk, spice-protocol and spice-vdagent (angry)#
 #######################################################################
 
+BuildRequires:	autoconf
+BuildRequires:	automake
+BuildRequires:	libtool-base
+BuildRequires:	slibtool
+BuildRequires:	make
 BuildRequires:	spice-protocol
 BuildRequires:	pkgconfig(alsa)
 BuildRequires:	pkgconfig(systemd)
