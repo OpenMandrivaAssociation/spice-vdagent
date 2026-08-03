@@ -72,5 +72,5 @@ autoreconf -fi
 %{_userunitdir}/spice-vdagent.service
 # For /usr/share/gdm/autostart/LoginWindow/spice-vdagent.desktop
 # We own the dir too, otherwise we must Require gdm
-%{_datadir}/gdm
+#{_datadir}/gdm
 %{_mandir}/man1/%{name}*.1*
